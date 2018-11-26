@@ -1,0 +1,193 @@
+<!doctype html>
+<html>
+	<head>
+		<title>webgl practice</title>
+		<style>
+			body{ background-color: black;}
+			canvas{ background-color: white;}
+		</style>
+
+		//javascript matrix lib
+		<script src="gl-matrix-min.js"></script>
+		<script src="raf_polyfill.js"></script>
+
+		//vertex shader part
+		<script id="shader-vs" type="x-shader/x-vertex">
+			attribute vec3 av3VertexPosition;
+			attribute vec3 av3VertexColor;
+
+			uniform mat4 um4Model;
+			uniform mat4 um4Projection;
+			
+			varying highp vec4 v4Color; //minumum precision requiement 
+			void main(void){
+				gl_Position = um4Projection * um4Model * vec4(av3VertexPosition, 1.0);	
+				v4Color = vec4(av3VertexColor, 1.0);	
+			}
+
+		</script>
+	
+		//fragment shader part
+		<script id="shader-fs" type="x-shader/x-fragment">
+			varying highp vec4 v4Color; 	
+			void main (void){
+				gl_FragColor = v4Color;
+			}
+		</script>
+		
+		//webgl part
+		<script>
+			var gl = null,
+				canvas = null,
+				glProgram = null,
+				fragmentShader = null,
+				vertexShader = null;
+
+			var vertexPositionAttribute = null,
+				verticeBuffer = null,
+				vertexColorAttribute = null,
+				colorBuffer = null;
+				
+			var angle = 0.0;
+
+			var modelMatrix = mat4.create(),
+				projectionMatrix = mat4.create();
+			
+			function initWebGL()
+			{
+				canvas = document.getElementById("my-canvas");
+				try{
+					gl = canvas.getContext("webgl") || canvas.getContext("experimental-webgl");
+				}catch(e){
+					//do nothing	
+				}
+
+				if(gl)
+				{
+					initShaders();	
+					setupBuffers();
+					getMatrixUniforms();
+					(function animLoop(){
+						setupWebGL();
+						setupDynamicBuffers();
+						setMatrixUniforms();
+						drawScene();
+						requestAnimationFrame(animLoop, canvas);
+					})();
+				}else{
+					alert(" Error: brower does support WebGL");	
+				}
+			}
+
+			function setupWebGL()
+			{
+				gl.clearColor(0.5, 0.5, 0.5, 1.0);
+				gl.clear(gl.COLOR_BUFFER_BIT);
+				gl.viewport(0, 0, canvas.width, canvas.height);
+				mat4.perspective(45, canvas.width / canvas.height, 0.1, 100.0,projectionMatrix );
+				mat4.identity(modelMatrix);
+				mat4.translate(modelMatrix, [0,0, -2.0]);
+			}
+
+			function initShaders()
+			{
+				//get shader souerce
+				//it will read vertex, shader part
+				var fsSource = document.getElementById('shader-fs').innerHTML,
+					vsSource = document.getElementById('shader-vs').innerHTML; 
+
+				//compile shaders
+				vertexShader = makeShader(vsSource, gl.VERTEX_SHADER);
+				fragmentShader = makeShader(fsSource, gl.FRAGMENT_SHADER);
+
+				//create program
+				glProgram = gl.createProgram();
+				
+				//attach & link shader to the program
+				gl.attachShader(glProgram, vertexShader);
+				gl.attachShader(glProgram, fragmentShader);
+				gl.linkProgram(glProgram);
+
+				if(!gl.getProgramParameter(glProgram, gl.LINK_STATUS)){
+					alert("Unable to initialize the shader program");	
+				}
+
+				//use program
+				gl.useProgram(glProgram);
+			}
+
+			//make Shader
+			function makeShader(src, type)
+			{
+				var shader = gl.createShader(type);
+				gl.shaderSource(shader, src);
+				gl.compileShader(shader);
+
+				if(!gl.getShaderParameter(shader, gl.COMPILE_STATUS)){
+					alert("Error compiling shaer: " + gl.getShaderInfoLog(shader));	
+				}
+				return shader;
+			}
+
+			function setupBuffers()
+			{
+				var verticeColors = [	
+					1.0, 0.0, 0.0,
+					1.0, 1.0, 1.0,
+					1.0, 0.0, 0.0,
+				];					
+
+				colorBuffer = gl.createBuffer();
+				gl.bindBuffer(gl.ARRAY_BUFFER, colorBuffer);
+				gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(verticeColors), gl.STATIC_DRAW);
+			}
+
+			function setupDynamicBuffers()
+			{
+				var x_translation = Math.sin(angle)/2.0,
+					y_translation = Math.cos(angle);
+
+				var vertices = [
+				//left traingle
+				-0.5 + x_translation, 0.5 + y_translation, -0.5,
+				0.0 + x_translation, 0.0 + y_translation, -0.5,
+				-0.5 + x_translation, -0.5 + y_translation, -0.5,
+				];
+				angle += 0.01;
+
+				verticeBuffer = gl.createBuffer();
+				gl.bindBuffer(gl.ARRAY_BUFFER, verticeBuffer);
+				gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertices), gl.DYNAMIC_DRAW);
+			}
+			
+			function drawScene()
+			{
+				vertexPositionAttribute = gl.getAttribLocation(glProgram, "av3VertexPosition");
+				gl.enableVertexAttribArray(vertexPositionAttribute);
+				gl.bindBuffer(gl.ARRAY_BUFFER, verticeBuffer);
+				gl.vertexAttribPointer(vertexPositionAttribute, 3, gl.FLOAT, false, 0, 0);
+
+				vertexColorAttribute = gl.getAttribLocation(glProgram, "av3VertexColor");
+				gl.enableVertexAttribArray(vertexColorAttribute);
+				gl.bindBuffer(gl.ARRAY_BUFFER, colorBuffer);
+				gl.vertexAttribPointer(vertexColorAttribute, 3, gl.FLOAT, false, 0, 0);
+
+				gl.drawArrays(gl.TRIANGLES, 0, 3); 
+			}
+
+			function getMatrixUniforms(){
+				glProgram.pMatrixUniform = gl.getUniformLocation(glProgram, "um4Projection");
+				glProgram.mvMatrixUniform = gl.getUniformLocation(glProgram, "um4Model");
+			}		
+			function setMatrixUniforms(){
+				gl.uniformMatrix4fv(glProgram.pMatrixUniform, false, projectionMatrix);
+				gl.uniformMatrix4fv(glProgram.mvMatrixUniform, false, modelMatrix);
+			}
+		</script>		
+	</head>	
+	<body onload="initWebGL()">		
+		<canvas id="my-canvas" width="600" height="300">
+		Your browser does not support the HTML5 canvas element.
+		</canvas>
+	</body>
+</html>
